@@ -36,7 +36,7 @@ export const login = async (req, res) => {
   }
 };
 
-export const logout = async(req, res) => {
+export const logout = async (req, res) => {
   const sessionid = req.signedCookies.token;
   const sessionFound = await Session.findById(sessionid);
   // console.log(userFound);
@@ -44,10 +44,10 @@ export const logout = async(req, res) => {
     return res.json({
       message: "user not logged in",
     });
-  } 
+  }
   res.clearCookie("token");
 
-   await Session.deleteMany({
+  await Session.deleteMany({
     userid: sessionFound.userid,
   });
   res.json({ message: "logged out" });
@@ -111,7 +111,7 @@ export const test = async (req, res) => {
 };
 
 export const createSession = async (res, userid) => {
-  await Session.deleteMany({ userid }); 
+  await Session.deleteMany({ userid });
   const sessionCreated = await Session.create({ userid });
 
   res.cookie("token", sessionCreated.id, {
@@ -123,12 +123,19 @@ export const createSession = async (res, userid) => {
   return sessionCreated;
 };
 
-export const fetchtoken = async (req, res) => {
-  const { code } = req.body;
-  const secret = process.env.GOOGLE_OAUTH_SECRET;
-  const client =process.env.GOOGLE_OAUTH_CLIENT;
-  const redirectURI = process.env.GOOGLE_OAUTH_REDIRECTURI;
-  const payload = `code=${code}&client_id=${client}&client_secret=${secret}&redirect_uri=${redirectURI}&grant_type=authorization_code`;
+
+export const google = async (req, res) => {
+  const redirectUri = `https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id=${process.env.GOOGLE_OAUTH_CLIENT}&scope=openid%20email%20profile&redirect_uri=${process.env.GOOGLE_OAUTH_REDIRECTURI}`;
+  res.redirect(redirectUri);
+  res.end();
+};
+
+export const callbackGoogle = async (req, res) => {
+
+  const { code } = req.query;
+  // var { token:sid } = req.cookies;
+  var sid=false;
+  const payload = `code=${code}&client_id=${process.env.GOOGLE_OAUTH_CLIENT}&client_secret=${process.env.GOOGLE_OAUTH_SECRET}&redirect_uri=${process.env.GOOGLE_OAUTH_REDIRECTURI}&grant_type=authorization_code`;
   const response = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: {
@@ -137,32 +144,50 @@ export const fetchtoken = async (req, res) => {
     body: payload,
   });
   const data = await response.json();
-  if (data.error) {
-    return;
-  }
-  const token = data.id_token;
-  const userdata = JSON.parse(atob(token.split(".")[1]));
-  const { name, email, picture } = userdata;
-  const userFound = await User.findOne({ email });
-  if (userFound) {
-  await createSession(res, userFound.id);
-  return res.json({
-    message: "Google login successful",
-  });
-} else {
-  const password = crypto.randomUUID();
-  const newUser = new User({
-    name,
-    email,
-    avatar: picture,
-    password,
-    provider:"google"
-  });
 
-  await newUser.save();
-  await createSession(res, newUser.id);
-  return res.json({
-    message: "Google login successful",
-  });
-}
+  const profile = JSON.parse(atob(data.id_token.split(".")[1]));
+  const findUser = await User.findOne({ email: profile.email });
+  // console.log("findUser", findUser);
+  if (findUser != null) {
+    const session = await Session.find({ userid: findUser.id });
+    const deleteSession = await Session.deleteMany({ userid: findUser.id });
+    const sessionCreated = await Session.create({ userid: findUser.id });
+
+    res.cookie("token", sessionCreated.id, {
+      signed: true,
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      httpOnly: true,
+    });
+    // sid=sessionCreated.id;
+    sid=true;
+  }
+  // if user was not found
+  else {
+    const { name, email, picture } = profile;
+    const password = crypto.randomUUID();
+    const newUser = new User({
+      name,
+      email,
+      avatar: picture,
+      password,
+      provider: "google",
+    });
+
+    await newUser.save();
+    const sessionCreated=await createSession(res, newUser.id);
+    res.cookie("token", sessionCreated.id, {
+      signed: true,
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      httpOnly: true,
+    });
+    // sid=sessionCreated.id;
+    sid=true;
+  }
+  
+  res.redirect(`http://localhost:5173/googlecallback?sid=${sid}`);
+ 
+  res.end();
 };
+
+
+

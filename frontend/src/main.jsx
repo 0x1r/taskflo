@@ -12,6 +12,8 @@ import HomeRedirect from "./pages/HomeRedirect.jsx";
 import AuthProvider from "./contexts/AuthProvider.jsx";
 import MainLayout from "./pages/MainLayout.jsx";
 import User from "./pages/User.jsx";
+import GoogleCallback from "./pages/GoogleCallback.jsx";
+
 
 
 createRoot(document.getElementById("root")).render(
@@ -19,6 +21,8 @@ createRoot(document.getElementById("root")).render(
     <AuthProvider>
       <BrowserRouter>
         <Routes>
+
+          <Route path=":googlecallback" element={<GoogleCallback />}/>
           <Route element={<PublicRoute />}>
             <Route path="/login" element={<Login />}></Route>
             <Route path="/register" element={<Register />}></Route>
