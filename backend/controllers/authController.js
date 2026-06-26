@@ -2,6 +2,10 @@ import User from "../models/userModel.js";
 import z from "zod";
 import bcrypt from "bcrypt";
 import Session from "../models/sessionModel.js";
+import {
+  fetchGoogleCode,
+  fetchGoogleuser,
+} from "../services/fetchGoogleuser.js";
 
 export const login = async (req, res) => {
   try {
@@ -123,31 +127,16 @@ export const createSession = async (res, userid) => {
   return sessionCreated;
 };
 
-
 export const google = async (req, res) => {
-  const redirectUri = `https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id=${process.env.GOOGLE_OAUTH_CLIENT}&scope=openid%20email%20profile&redirect_uri=${process.env.GOOGLE_OAUTH_REDIRECTURI}`;
-  res.redirect(redirectUri);
-  res.end();
+  return fetchGoogleuser(req, res);
 };
 
 export const callbackGoogle = async (req, res) => {
-
   const { code } = req.query;
-  // var { token:sid } = req.cookies;
-  var sid=false;
-  const payload = `code=${code}&client_id=${process.env.GOOGLE_OAUTH_CLIENT}&client_secret=${process.env.GOOGLE_OAUTH_SECRET}&redirect_uri=${process.env.GOOGLE_OAUTH_REDIRECTURI}&grant_type=authorization_code`;
-  const response = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: payload,
-  });
-  const data = await response.json();
-
-  const profile = JSON.parse(atob(data.id_token.split(".")[1]));
+  const tokenInfo = await fetchGoogleCode(code);
+  const profile = tokenInfo.payload;
+  var sid = false;
   const findUser = await User.findOne({ email: profile.email });
-  // console.log("findUser", findUser);
   if (findUser != null) {
     const session = await Session.find({ userid: findUser.id });
     const deleteSession = await Session.deleteMany({ userid: findUser.id });
@@ -158,11 +147,8 @@ export const callbackGoogle = async (req, res) => {
       maxAge: 7 * 24 * 60 * 60 * 1000,
       httpOnly: true,
     });
-    // sid=sessionCreated.id;
-    sid=true;
-  }
-  // if user was not found
-  else {
+    sid = true;
+  } else {
     const { name, email, picture } = profile;
     const password = crypto.randomUUID();
     const newUser = new User({
@@ -174,20 +160,14 @@ export const callbackGoogle = async (req, res) => {
     });
 
     await newUser.save();
-    const sessionCreated=await createSession(res, newUser.id);
+    const sessionCreated = await createSession(res, newUser.id);
     res.cookie("token", sessionCreated.id, {
       signed: true,
       maxAge: 7 * 24 * 60 * 60 * 1000,
       httpOnly: true,
     });
-    // sid=sessionCreated.id;
-    sid=true;
+    sid = true;
   }
-  
   res.redirect(`http://localhost:5173/googlecallback?sid=${sid}`);
- 
   res.end();
 };
-
-
-

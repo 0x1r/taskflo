@@ -16,7 +16,6 @@ export default function GoogleOidc() {
   };
   useEffect(() => {
     const handleStorage = (e) => {
-      // console.log("fired");
       const sid = localStorage.getItem("sid");
       console.log(sid);
       if (sid === "true") {
