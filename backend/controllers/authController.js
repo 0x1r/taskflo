@@ -6,6 +6,7 @@ import {
   fetchGoogleCode,
   fetchGoogleuser,
 } from "../services/fetchGoogleuser.js";
+import passport from "passport";
 
 export const login = async (req, res) => {
   try {
@@ -127,47 +128,55 @@ export const createSession = async (res, userid) => {
   return sessionCreated;
 };
 
-export const google = async (req, res) => {
-  return fetchGoogleuser(req, res);
+export const google = async (req, res, next) => {
+  passport.authenticate("google", { scope: ["email", "profile"] })(
+    req,
+    res,
+    next,
+  );
+  return res.end();
 };
 
-export const callbackGoogle = async (req, res) => {
-  const { code } = req.query;
-  const tokenInfo = await fetchGoogleCode(code);
-  const profile = tokenInfo.payload;
-  var sid = false;
-  const findUser = await User.findOne({ email: profile.email });
-  if (findUser != null) {
-    const session = await Session.find({ userid: findUser.id });
-    const deleteSession = await Session.deleteMany({ userid: findUser.id });
-    const sessionCreated = await Session.create({ userid: findUser.id });
+export const callbackGoogle = async (req, res, next) => {
+  passport.authenticate(
+    "google",
+    { failureRedirect: "http://localhost:3000/login", session: false },
+    async function (err, user, info) {
+      const profile = user._json;
+      var sid = false;
+      const findUser = await User.findOne({ email: profile.email });
+      if (findUser != null) {
+        const session = await Session.find({ userid: findUser.id });
+        const deleteSession = await Session.deleteMany({ userid: findUser.id });
+        const sessionCreated = await Session.create({ userid: findUser.id });
 
-    res.cookie("token", sessionCreated.id, {
-      signed: true,
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-      httpOnly: true,
-    });
-    sid = true;
-  } else {
-    const { name, email, picture } = profile;
-    const password = crypto.randomUUID();
-    const newUser = new User({
-      name,
-      email,
-      avatar: picture,
-      password,
-      provider: "google",
-    });
+        res.cookie("token", sessionCreated.id, {
+          signed: true,
+          maxAge: 7 * 24 * 60 * 60 * 1000,
+          httpOnly: true,
+        });
+        sid = true;
+      } else {
+        const { name, email, picture } = profile;
+        const password = crypto.randomUUID();
+        const newUser = new User({
+          name,
+          email,
+          avatar: picture,
+          password,
+          provider: "google",
+        });
 
-    await newUser.save();
-    const sessionCreated = await createSession(res, newUser.id);
-    res.cookie("token", sessionCreated.id, {
-      signed: true,
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-      httpOnly: true,
-    });
-    sid = true;
-  }
-  res.redirect(`http://localhost:5173/googlecallback?sid=${sid}`);
-  res.end();
+        await newUser.save();
+        const sessionCreated = await createSession(res, newUser.id);
+        res.cookie("token", sessionCreated.id, {
+          signed: true,
+          maxAge: 7 * 24 * 60 * 60 * 1000,
+          httpOnly: true,
+        });
+        sid = true;
+      }
+      res.redirect(`http://localhost:5173/googlecallback?sid=${sid}`);
+    },
+  )(req, res, next);
 };

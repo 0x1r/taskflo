@@ -1,5 +1,6 @@
 import "dotenv/config";
 
+
 import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
@@ -7,7 +8,7 @@ import authRoutes from "./routes/authRoutes.js";
 import mongoose from "mongoose";
 import helmet from "helmet";
 import cookieParser from "cookie-parser";
-// dotenv.config();
+import passport from './config/passportGoogleconfig.js'
 
 await mongoose.connect(process.env.DBURL);
 
